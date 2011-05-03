@@ -1,0 +1,48 @@
+.Dd May 03, 2011
+.Dt TWISTORY 1
+.Os
+.Sh NAME
+.Nm twistory
+.Nd display the given user's twitter history
+.Sh SYNOPSIS
+.Nm
+.Op Fl hl
+.Op Fl a Ar id
+.Op Fl b Ar id
+.Fl u Ar user
+.Sh DESCRIPTION
+.Nm
+is a tool to retrieve a user's twitter history.
+That is, it will fetch all the messages the user tweeted and print them to
+STDOUT.
+.Nm
+will prefix the message with the message-ID and suffix it with the
+timestamp.
+.Sh OPTIONS
+The following options are supported by
+.Nm :
+.Bl -tag -width u_user_
+.It Fl a Ar id
+Display messages created ofter the given message-id.
+If not given, then all messages since the beginning of time will be
+retrieved.
+.It Fl b Ar id
+Display messages created before the given message-id.
+If not given, then all of the user's messages will be retrieved.
+.It Fl h
+Print a short usage statement and exit.
+.It Fl l
+Lineify -- that is, replace all newlines in the messages with "\\n".
+.It Fl u Ar user
+Retrieve messages from this user.
+.El
+.Sh EXIT STATUS
+.Ex -std
+.Sh HISTORY
+.Nm
+was originally written by
+.An Jan Schaumann
+.Aq jschauma@netmeister.org
+in April 2011.
+.Sh BUGS
+Please report bugs and feature requests to the author.

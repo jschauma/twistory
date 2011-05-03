@@ -1,0 +1,16 @@
+twistory is a tool to retrieve your twitter history.  That is, it will
+fetch all the messages you tweeted and print them to STDOUT.  twistory
+will prefix the message with the message-ID and suffix it with the
+timestamp.
+
+Requirements:
+	- python (presumably > 2.5)
+	- py-tweepy (http://code.google.com/p/tweepy/)
+
+Installation:
+	- install -c -m 755 src/twistory.py /somewhere/in/your/path/twistory
+	- install -c -m 444 doc/twistory.1 /somewhere/in/your/manpath/man1/twistory.1
+
+Questions/comments:
+	jschauma@netmeister.org
+	http://www.netmeister.org/apps/twitter/twistory/
