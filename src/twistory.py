@@ -5,7 +5,7 @@
 # will prefix the message with the message-ID and suffix it with the
 # timestamp.
 #
-# Copyright (c) 2011, Jan Schaumann. All rights reserved.
+# Copyright (c) 2011,2012, Jan Schaumann. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -67,10 +67,11 @@ class Twistory(object):
         """Construct a Twistory object with default values."""
 
         self.__opts = {
-                    "after" : -1,
-                    "before" : -1,
-                    "lineify": False,
-                    "user" : ""
+                    "after"    : -1,
+                    "before"   : -1,
+                    "lineify"  : False,
+                    "retweets" : False,
+                    "user"     : ""
                  }
 
 
@@ -79,10 +80,11 @@ class Twistory(object):
 
         def __init__(self, rval):
             self.err = rval
-            self.msg = 'Usage: %s [-h] [-[ab] id] -u user\n' % os.path.basename(sys.argv[0])
+            self.msg = 'Usage: %s [-hr] [-[ab] id] -u user\n' % os.path.basename(sys.argv[0])
             self.msg += '\t-a after   get history since this message\n'
             self.msg += '\t-b before  get history prior to this message\n'
             self.msg += '\t-h         print this message and exit\n'
+            self.msg += '\t-r         print messages that were retweeted\n'
             self.msg += '\t-u user    get history of this user\n'
 
 
@@ -93,8 +95,11 @@ class Twistory(object):
                 before = self.getOpt("before")
                 after = self.getOpt("after")
                 user = self.getOpt("user")
+                apicall = tweepy.api.user_timeline
+                if self.getOpt("retweets"):
+                    apicall = tweepy.api.retweeted_by_user
                 try:
-                    for status in tweepy.Cursor(tweepy.api.user_timeline, id=user).items():
+                    for status in tweepy.Cursor(apicall, id=user).items():
                         if (before == -1):
                             # Ugh. Kludge.  If '-b' was not given, we'd
                             # like to default to infinity, but that isn't
@@ -188,7 +193,7 @@ class Twistory(object):
         """
 
         try:
-            opts, args = getopt.getopt(inargs, "a:b:hlu:")
+            opts, args = getopt.getopt(inargs, "a:b:hlru:")
         except getopt.GetoptError:
             raise self.Usage(EXIT_ERROR)
 
@@ -202,6 +207,8 @@ class Twistory(object):
                     raise self.Usage(EXIT_SUCCESS)
                 if o in ("-l"):
                     self.setOpt("lineify", True)
+                if o in ("-r"):
+                    self.setOpt("retweets", True)
                 if o in ("-u"):
                     self.setOpt("user", a)
             except ValueError, e:

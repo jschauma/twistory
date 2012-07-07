@@ -1,4 +1,4 @@
-.Dd May 03, 2011
+.Dd July 06, 2012
 .Dt TWISTORY 1
 .Os
 .Sh NAME
@@ -6,7 +6,7 @@
 .Nd display the given user's twitter history
 .Sh SYNOPSIS
 .Nm
-.Op Fl hl
+.Op Fl hlr
 .Op Fl a Ar id
 .Op Fl b Ar id
 .Fl u Ar user
@@ -33,6 +33,8 @@ If not given, then all of the user's messages will be retrieved.
 Print a short usage statement and exit.
 .It Fl l
 Lineify -- that is, replace all newlines in the messages with "\\n".
+.It Fl r
+Get messages that were retweeted.
 .It Fl u Ar user
 Retrieve messages from this user.
 .El

@@ -5,7 +5,7 @@ timestamp.
 
 Requirements:
 	- python (presumably > 2.5)
-	- py-tweepy (http://code.google.com/p/tweepy/)
+	- py-tweepy (https://github.com/tweepy/tweepy)
 
 Installation:
 	- install -c -m 755 src/twistory.py /somewhere/in/your/path/twistory

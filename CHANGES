@@ -1,2 +1,5 @@
+Version 0.2 (2012-07-06)
+ * add support for '-r' to get retweeted messages
+
 Version 0.1 (2011-05-03)
  * Initial version
