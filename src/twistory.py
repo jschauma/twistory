@@ -31,6 +31,7 @@
 # Originally written by Jan Schaumann <jschauma@netmeister.org> in May 2011.
 
 import getopt
+import httplib
 import os
 import re
 import sys
@@ -91,6 +92,7 @@ class Twistory(object):
     def displayTimeline(self):
         """Print the requested timeline."""
 
+        tco_re = re.compile("http://t.co/(?P<code>[0-9a-z]+)", re.I)
         while True:
                 before = self.getOpt("before")
                 after = self.getOpt("after")
@@ -118,6 +120,15 @@ class Twistory(object):
 
                         if ((before > status.id) and (status.id > after)):
                             msg = status.text.encode("UTF-8")
+                            for m in tco_re.finditer(msg):
+                                code = m.group('code')
+                                h = httplib.HTTPConnection("t.co")
+                                h.request("GET", "/" + code)
+                                r = h.getresponse()
+                                link = r.getheader("Location")
+                                if link:
+                                    tco = re.compile("http://t.co/" + code)
+                                    msg = re.sub(tco, link, msg)
                             if self.getOpt("lineify"):
                                 msg = msg.replace("\n", "\\n")
                             print "%s %s (%s)" % (status.id, msg, status.created_at)
