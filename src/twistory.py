@@ -74,6 +74,7 @@ class Twistory(object):
                     "retweets" : False,
                     "user"     : ""
                  }
+        self.verbosity = 0
 
 
     class Usage(Exception):
@@ -81,60 +82,78 @@ class Twistory(object):
 
         def __init__(self, rval):
             self.err = rval
-            self.msg = 'Usage: %s [-hr] [-[ab] id] -u user\n' % os.path.basename(sys.argv[0])
+            self.msg = 'Usage: %s [-hrv] [-[ab] id] -u user\n' % os.path.basename(sys.argv[0])
             self.msg += '\t-a after   get history since this message\n'
             self.msg += '\t-b before  get history prior to this message\n'
             self.msg += '\t-h         print this message and exit\n'
             self.msg += '\t-r         print messages that were retweeted\n'
             self.msg += '\t-u user    get history of this user\n'
+            self.msg += '\t-v         increase verbosity\n'
 
 
     def displayTimeline(self):
         """Print the requested timeline."""
 
+        self.verbose("Fetching tweets...")
+        count = 1
+        lastid = None
+
         tco_re = re.compile("http://t.co/(?P<code>[0-9a-z]+)", re.I)
+        before = self.getOpt("before")
+        after = self.getOpt("after")
+        user = self.getOpt("user")
+        apicall = tweepy.api.user_timeline
+        if self.getOpt("retweets"):
+            apicall = tweepy.api.retweeted_by_user
         while True:
-                before = self.getOpt("before")
-                after = self.getOpt("after")
-                user = self.getOpt("user")
-                apicall = tweepy.api.user_timeline
-                if self.getOpt("retweets"):
-                    apicall = tweepy.api.retweeted_by_user
-                try:
-                    for status in tweepy.Cursor(apicall, id=user).items():
-                        if (before == -1):
-                            # Ugh. Kludge.  If '-b' was not given, we'd
-                            # like to default to infinity, but that isn't
-                            # working so well, so let's grab the latest
-                            # message of the user in question.  Add one to
-                            # also include that message itself in the
-                            # results.
-                            before = status.id + 1
+            try:
+                pageitems = apicall(screen_name=user, max_id=lastid, count=200)
+                if not pageitems:
+                    break
+                for status in pageitems:
+                    lastid = status.id - 1
+                    self.verbose("Iterating (%d)..." % count, 2)
+                    if (before == -1):
+                        # Ugh. Kludge.  If '-b' was not given, we'd
+                        # like to default to infinity, but that isn't
+                        # working so well, so let's grab the latest
+                        # message of the user in question.  Add one to
+                        # also include that message itself in the
+                        # results.
+                        before = status.id + 1
 
-                        if (status.id < after):
-                            # Just save us a few pages.  We could of
-                            # course just iterate over all messages, but
-                            # that doesn't do us any good since the API
-                            # does return results sorted already.
-                            break
+                    if (status.id < after):
+                        self.verbose("Tweet earlier than threshold, breaking out.", 2)
+                        # Just save us a few pages.  We could of
+                        # course just iterate over all messages, but
+                        # that doesn't do us any good since the API
+                        # does return results sorted already.
+                        break
 
-                        if ((before > status.id) and (status.id > after)):
-                            msg = status.text.encode("UTF-8")
-                            for m in tco_re.finditer(msg):
-                                code = m.group('code')
-                                h = httplib.HTTPConnection("t.co")
-                                h.request("GET", "/" + code)
-                                r = h.getresponse()
-                                link = r.getheader("Location")
-                                if link:
-                                    tco = re.compile("http://t.co/" + code)
-                                    msg = re.sub(tco, link, msg)
-                            if self.getOpt("lineify"):
-                                msg = msg.replace("\n", "\\n")
-                            print "%s %s (%s)" % (status.id, msg, status.created_at)
-                except tweepy.error.TweepError, e:
-                    self.handleTweepError(e, "Unable to get messages for %s" % user)
+                    count = count + 1
+                    self.verbose("Before: %d; Status: %d; After: %d, lastid: %d" % (before, status.id, after, lastid), 4)
+                    if ((before > status.id) and (status.id > after)):
+                        msg = status.text.encode("UTF-8")
+                        for m in tco_re.finditer(msg):
+                            code = m.group('code')
+                            h = httplib.HTTPConnection("t.co")
+                            h.request("GET", "/" + code)
+                            r = h.getresponse()
+                            link = r.getheader("Location")
+                            if link:
+                                tco = re.compile("http://t.co/" + code)
+                                msg = re.sub(tco, link, msg)
+                        if self.getOpt("lineify"):
+                            msg = msg.replace("\n", "\\n")
+                        print "%s %s (%s)" % (status.id, msg, status.created_at)
+            except tweepy.error.TweepError, e:
+                if not self.handleTweepError(e, "Unable to get messages for %s" % user):
+                    break
 
+            # We reset 'lastid' on each loop; we set it on each item
+            # found. If it's None, then we have no more items to fetch and
+            # should terminate the loop.
+            if not lastid:
                 break
 
 
@@ -166,31 +185,39 @@ class Twistory(object):
             # on, why not.
             return
 
-        if tweeperr and tweeperr.response and tweeperr.response.status:
-            if tweeperr.response.status == TWITTER_RESPONSE_STATUS["FailWhale"]:
-                errmsg = "Twitter #FailWhale'd on me on %s." % time.asctime()
-            elif tweeperr.response.status == TWITTER_RESPONSE_STATUS["Broken"]:
-                errmsg = "Twitter is busted again: %s" % time.asctime()
-            elif tweeperr.response.status == TWITTER_RESPONSE_STATUS["RateLimited"] or \
-                 tweeperr.response.status == TWITTER_RESPONSE_STATUS["SearchRateLimited"]:
-                errmsg = "Rate limited until %s." % rate_limit["reset_time"]
-                diff = rate_limit["reset_time_in_seconds"] - time.time()
-                if rate_limit["remaining_hits"] > 0:
-                    # False alarm?  We occasionally seem to hit a race
-                    # condition where one call falls directly onto the
-                    # reset time, so we appear to be throttled for 59:59
-                    # minutes, but actually aren't.  Let's pretend that
-                    # didn't happen.
-                    return
-            else:
-                errmsg = "On %s Twitter told me:\n'%s'" % (time.asctime(), tweeperr)
+        if hasattr(tweeperr, 'response'):
+            response = tweeperr.response
+            if hasattr(response, 'status'):
+                status = response.status
+                if status == TWITTER_RESPONSE_STATUS["FailWhale"]:
+                    errmsg = "Twitter #FailWhale'd on me on %s." % time.asctime()
+                elif status == TWITTER_RESPONSE_STATUS["Broken"]:
+                    errmsg = "Twitter is busted again: %s" % time.asctime()
+                elif status == TWITTER_RESPONSE_STATUS["RateLimited"] or \
+                    tweeperr.response.status == TWITTER_RESPONSE_STATUS["SearchRateLimited"]:
+                    errmsg = "Rate limited until %s." % rate_limit["reset_time"]
+                    diff = rate_limit["reset_time_in_seconds"] - time.time()
+                    if rate_limit["remaining_hits"] > 0:
+                        # False alarm?  We occasionally seem to hit a race
+                        # condition where one call falls directly onto the
+                        # reset time, so we appear to be throttled for 59:59
+                        # minutes, but actually aren't.  Let's pretend that
+                        # didn't happen.
+                        return
+                else:
+                    errmsg = "On %s Twitter told me:\n'%s'" % (time.asctime(), tweeperr)
+        else:
+            errmsg = tweeperr.reason
 
-        sys.stderr.write(info + "\n" + errmsg)
+        sys.stderr.write(info + "\n" + errmsg + "\n")
 
         if diff:
+            diff = diff + 2
             sys.stderr.write("Sleeping for %d seconds...\n" % diff)
             time.sleep(diff)
+            return True
 
+        return False
 
 
     def parseOptions(self, inargs):
@@ -204,7 +231,7 @@ class Twistory(object):
         """
 
         try:
-            opts, args = getopt.getopt(inargs, "a:b:hlru:")
+            opts, args = getopt.getopt(inargs, "a:b:hlru:v")
         except getopt.GetoptError:
             raise self.Usage(EXIT_ERROR)
 
@@ -222,6 +249,8 @@ class Twistory(object):
                     self.setOpt("retweets", True)
                 if o in ("-u"):
                     self.setOpt("user", a)
+                if o in ("-v"):
+                    self.verbosity = self.verbosity + 1
             except ValueError, e:
                 sys.stderr.write("Invalid argument for option %s: %s\n" % (o, e))
                 sys.exit(EXIT_ERROR)
@@ -234,6 +263,14 @@ class Twistory(object):
         """Set the given option to the provided value."""
 
         self.__opts[opt] = val
+
+
+    def verbose(self, msg, level=1):
+        """Print given message to STDERR if the object's verbosity is >=
+           the given level"""
+
+        if (self.verbosity >= level):
+            sys.stderr.write("%s> %s\n" % ('=' * level, msg))
 
 
 ###

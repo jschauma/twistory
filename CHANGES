@@ -1,3 +1,7 @@
+Version 0.4 (2012-08-04)
+ * add '-v' flag
+ * properly handle pagination in the new world
+
 Version 0.3 (2012-07-16)
  * unwrap t.co links
 
