@@ -98,14 +98,15 @@ class Twistory(object):
         count = 1
         lastid = None
 
-        tco_re = re.compile("http://t.co/(?P<code>[0-9a-z]+)", re.I)
+        tco_re = re.compile("https?://t.co/(?P<code>[0-9a-z]+)", re.I)
         before = self.getOpt("before")
         after = self.getOpt("after")
         user = self.getOpt("user")
         apicall = tweepy.api.user_timeline
+        loop = True
         if self.getOpt("retweets"):
             apicall = tweepy.api.retweeted_by_user
-        while True:
+        while loop:
             try:
                 pageitems = apicall(screen_name=user, max_id=lastid, count=200)
                 if not pageitems:
@@ -128,6 +129,7 @@ class Twistory(object):
                         # course just iterate over all messages, but
                         # that doesn't do us any good since the API
                         # does return results sorted already.
+                        loop = False
                         break
 
                     count = count + 1
@@ -136,16 +138,20 @@ class Twistory(object):
                         msg = status.text.encode("UTF-8")
                         for m in tco_re.finditer(msg):
                             code = m.group('code')
+                            self.verbose("Unwrapping %s..." % code, 3)
                             h = httplib.HTTPConnection("t.co")
                             h.request("GET", "/" + code)
                             r = h.getresponse()
                             link = r.getheader("Location")
                             if link:
-                                tco = re.compile("http://t.co/" + code)
+                                tco = re.compile("https?://t.co/" + code)
                                 msg = re.sub(tco, link, msg)
                         if self.getOpt("lineify"):
                             msg = msg.replace("\n", "\\n")
                         print "%s %s (%s)" % (status.id, msg, status.created_at)
+            except httplib.IncompleteRead, e:
+                self.verbose("Incomplete read, trying again in 5 seconds.")
+                time.sleep(5)
             except tweepy.error.TweepError, e:
                 if not self.handleTweepError(e, "Unable to get messages for %s" % user):
                     break

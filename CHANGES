@@ -1,3 +1,8 @@
+Version 0.5 (2012-08-06)
+ * properly unwrap https links
+ * bail out correctly when '-a' or '-b' was given and we encounter the
+   boundary tweet
+
 Version 0.4 (2012-08-04)
  * add '-v' flag
  * properly handle pagination in the new world
