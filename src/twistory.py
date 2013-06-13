@@ -105,7 +105,7 @@ class Twistory(object):
         apicall = tweepy.api.user_timeline
         loop = True
         if self.getOpt("retweets"):
-            apicall = tweepy.api.retweeted_by_user
+            apicall = tweepy.api.retweeted_by
         while loop:
             try:
                 pageitems = apicall(screen_name=user, max_id=lastid, count=200)

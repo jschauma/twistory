@@ -1,3 +1,6 @@
+Version 0.6 (2013-06-12)
+ * update to match tweepy 2.0 (retweeted_by_user was removed)
+
 Version 0.5 (2012-08-06)
  * properly unwrap https links
  * bail out correctly when '-a' or '-b' was given and we encounter the
