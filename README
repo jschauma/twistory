@@ -4,7 +4,7 @@ will prefix the message with the message-ID and suffix it with the
 timestamp.
 
 Requirements:
-	- python (presumably > 2.5)
+	- python 3.x
 	- py-tweepy (https://github.com/tweepy/tweepy)
 
 Installation:
@@ -13,4 +13,4 @@ Installation:
 
 Questions/comments:
 	jschauma@netmeister.org
-	http://www.netmeister.org/apps/twitter/twistory/
+	https://www.netmeister.org/apps/twitter/twistory/
