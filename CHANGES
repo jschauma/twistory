@@ -1,3 +1,9 @@
+Version 0.8 (2023-04-19)
+ * move to python3
+
+Version 0.7 (2013-07-01)
+ * implement authentication
+
 Version 0.6 (2013-06-12)
  * update to match tweepy 2.0 (retweeted_by_user was removed)
 

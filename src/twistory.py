@@ -1,11 +1,11 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3.10
 #
 # twistory is a tool to retrieve your twitter history.  That is, it will
 # fetch all the messages you tweeted and print them to STDOUT.  twistory
 # will prefix the message with the message-ID and suffix it with the
 # timestamp.
 #
-# Copyright (c) 2011,2012, Jan Schaumann. All rights reserved.
+# Copyright (c) 2011,2012,2013, Jan Schaumann. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
@@ -31,7 +31,7 @@
 # Originally written by Jan Schaumann <jschauma@netmeister.org> in May 2011.
 
 import getopt
-import httplib
+import http.client
 import os
 import re
 import sys
@@ -64,16 +64,24 @@ TWITTER_RESPONSE_STATUS = {
 class Twistory(object):
     """A simple twitter history display object."""
 
+    EXIT_ERROR = 1
+    EXIT_SUCCESS = 0
+
     def __init__(self):
         """Construct a Twistory object with default values."""
 
         self.__opts = {
                     "after"    : -1,
                     "before"   : -1,
+                    "cfg_file" : os.path.expanduser("~/.twistory"),
                     "lineify"  : False,
                     "retweets" : False,
                     "user"     : ""
                  }
+        self.auth = None
+        self.api = None
+        self.api_credentials = {}
+        self.users = {}
         self.verbosity = 0
 
 
@@ -102,13 +110,14 @@ class Twistory(object):
         before = self.getOpt("before")
         after = self.getOpt("after")
         user = self.getOpt("user")
-        apicall = tweepy.api.user_timeline
+        apicall = self.api.user_timeline
         loop = True
         if self.getOpt("retweets"):
-            apicall = tweepy.api.retweeted_by
+            apicall = self.api.retweeted_by
         while loop:
             try:
                 pageitems = apicall(screen_name=user, max_id=lastid, count=200)
+                print("%s" % user)
                 if not pageitems:
                     break
                 for status in pageitems:
@@ -139,7 +148,7 @@ class Twistory(object):
                         for m in tco_re.finditer(msg):
                             code = m.group('code')
                             self.verbose("Unwrapping %s..." % code, 3)
-                            h = httplib.HTTPConnection("t.co")
+                            h = http.client.HTTPConnection("t.co")
                             h.request("GET", "/" + code)
                             r = h.getresponse()
                             link = r.getheader("Location")
@@ -148,11 +157,13 @@ class Twistory(object):
                                 msg = re.sub(tco, link, msg)
                         if self.getOpt("lineify"):
                             msg = msg.replace("\n", "\\n")
-                        print "%s %s (%s)" % (status.id, msg, status.created_at)
-            except httplib.IncompleteRead, e:
+                        print("%s %s (%s)" % (status.id, msg, status.created_at))
+            except Exception as e:
+                self.verbose(e)
+            except http.client.IncompleteRead as e:
                 self.verbose("Incomplete read, trying again in 5 seconds.")
                 time.sleep(5)
-            except tweepy.error.TweepError, e:
+            except tweepy.error.TweepError as e:
                 if not self.handleTweepError(e, "Unable to get messages for %s" % user):
                     break
 
@@ -161,6 +172,38 @@ class Twistory(object):
             # should terminate the loop.
             if not lastid:
                 break
+
+
+    def getAccessInfo(self, user):
+        """Initialize OAuth Access Info (if not found in the configuration file)."""
+
+        self.auth = tweepy.OAuthHandler(self.api_credentials['key'], self.api_credentials['secret'])
+        if user in self.users:
+            return
+
+        auth_url = self.auth.get_authorization_url(True)
+        print("Access credentials for %s not found in %s." % (user, self.getOpt("cfg_file")))
+        print("Please log in on twitter.com as %s and then go to: " % user)
+        print("  " + auth_url)
+        verifier = raw_input("Enter PIN: ").strip()
+        self.auth.get_access_token(verifier)
+
+        self.users[user] = {
+            "key" : self.auth.access_token.key,
+            "secret" : self.auth.access_token.secret
+        }
+
+        cfile = self.getOpt("cfg_file")
+        try:
+            f = file(cfile, "a")
+            f.write("%s_key = %s\n" % (user, self.auth.access_token.key))
+            f.write("%s_secret = %s\n" % (user, self.auth.access_token.secret))
+            f.close()
+        except IOError as e:
+            sys.stderr.write("Unable to write to config file '%s': %s\n" % \
+                (cfile, e.strerror))
+            raise
+
 
 
     def getOpt(self, opt):
@@ -184,8 +227,8 @@ class Twistory(object):
         errmsg = ""
 
         try:
-            rate_limit = tweepy.api.rate_limit_status()
-        except tweepy.error.TweepError, e:
+            rate_limit = self.api.rate_limit_status()
+        except tweepy.error.TweepError as e:
             # Hey now, look at that, we can failwahle on getting the api
             # status. Neat, huh? Let's pretend that didn't happen and move
             # on, why not.
@@ -226,6 +269,58 @@ class Twistory(object):
         return False
 
 
+    def parseConfig(self, cfile):
+        """Parse the configuration file and set appropriate variables.
+
+        This function may throw an exception if it can't read or parse the
+        configuration file (for any reason).
+
+        Arguments:
+            cfile -- the configuration file to parse
+
+        Aborts:
+            if we can't access the config file
+        """
+
+        try:
+            f = open(cfile, "r")
+        except IOError as e:
+            sys.stderr.write("Unable to open config file '%s': %s\n" % \
+                (cfile, e.strerror))
+            sys.exit(self.EXIT_ERROR)
+
+        key_pattern = re.compile('^(?P<username>[^#]+)_key\s*=\s*(?P<key>.+)')
+        secret_pattern = re.compile('^(?P<username>[^#]+)_secret\s*=\s*(?P<secret>.+)')
+        for line in f.readlines():
+            line = line.strip()
+            key_match = key_pattern.match(line)
+            if key_match:
+                user = key_match.group('username')
+                if user == "<api>":
+                    self.api_credentials['key'] = key_match.group('key')
+                else:
+                    if user in self.users:
+                        self.users[user]['key'] = key_match.group('key')
+                    else:
+                        self.users[user] = {
+                            "key" : key_match.group('key')
+                        }
+
+            secret_match = secret_pattern.match(line)
+            if secret_match:
+                user = secret_match.group('username')
+                if user == "<api>":
+                    self.api_credentials['secret'] = secret_match.group('secret')
+                else:
+                    if user in self.users:
+                        self.users[user]['secret'] = secret_match.group('secret')
+                    else:
+                        self.users[user] = {
+                            "secret" : secret_match.group('secret')
+                        }
+        f.close()
+
+
     def parseOptions(self, inargs):
         """Parse given command-line options and set appropriate attributes.
 
@@ -257,7 +352,7 @@ class Twistory(object):
                     self.setOpt("user", a)
                 if o in ("-v"):
                     self.verbosity = self.verbosity + 1
-            except ValueError, e:
+            except ValueError as e:
                 sys.stderr.write("Invalid argument for option %s: %s\n" % (o, e))
                 sys.exit(EXIT_ERROR)
 
@@ -271,6 +366,16 @@ class Twistory(object):
         self.__opts[opt] = val
 
 
+    def setupApi(self, user):
+        """Create the object's api"""
+
+        key = self.users[user]["key"]
+        secret = self.users[user]["secret"]
+        self.auth.set_access_token(key, secret)
+
+        self.api = tweepy.API(self.auth)
+
+
     def verbose(self, msg, level=1):
         """Print given message to STDERR if the object's verbosity is >=
            the given level"""
@@ -279,21 +384,34 @@ class Twistory(object):
             sys.stderr.write("%s> %s\n" % ('=' * level, msg))
 
 
+    def verifyConfig(self):
+        """Verify that we have api credentials."""
+
+        if (not ("key" in self.api_credentials and "secret" in self.api_credentials)):
+            sys.stderr.write("No API credentials found.  Please do the 'register-this-app' dance.\n")
+            sys.exit(self.EXIT_ERROR)
+
+
+
 ###
 ### "Main"
 ###
 
 if __name__ == "__main__":
     try:
-        reload(sys)
-        sys.setdefaultencoding("UTF-8")
-
         twistory = Twistory()
         try:
             twistory.parseOptions(sys.argv[1:])
+            twistory.parseConfig(twistory.getOpt("cfg_file"))
+            twistory.verifyConfig()
+
+            user = twistory.getOpt("user")
+            twistory.getAccessInfo(user)
+            twistory.setupApi(user)
+
             twistory.displayTimeline()
 
-        except twistory.Usage, u:
+        except twistory.Usage as u:
             if (u.err == EXIT_ERROR):
                 out = sys.stderr
             else:
