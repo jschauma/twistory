@@ -1,7 +1,7 @@
 # A simple Makefile to (un)install twistory.
 
 PREFIX=/usr/local
-PYTHON=python
+PYTHON?=python
 
 all:
 	@echo "Available targets:"

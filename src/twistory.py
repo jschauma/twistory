@@ -117,7 +117,6 @@ class Twistory(object):
         while loop:
             try:
                 pageitems = apicall(screen_name=user, max_id=lastid, count=200)
-                print("%s" % user)
                 if not pageitems:
                     break
                 for status in pageitems:
@@ -145,7 +144,7 @@ class Twistory(object):
                     self.verbose("Before: %d; Status: %d; After: %d, lastid: %d" % (before, status.id, after, lastid), 4)
                     if ((before > status.id) and (status.id > after)):
                         msg = status.text.encode("UTF-8")
-                        for m in tco_re.finditer(msg):
+                        for m in tco_re.finditer(str(msg)):
                             code = m.group('code')
                             self.verbose("Unwrapping %s..." % code, 3)
                             h = http.client.HTTPConnection("t.co")
@@ -154,7 +153,7 @@ class Twistory(object):
                             link = r.getheader("Location")
                             if link:
                                 tco = re.compile("https?://t.co/" + code)
-                                msg = re.sub(tco, link, msg)
+                                msg = re.sub(tco, link, str(msg))
                         if self.getOpt("lineify"):
                             msg = msg.replace("\n", "\\n")
                         print("%s %s (%s)" % (status.id, msg, status.created_at))
